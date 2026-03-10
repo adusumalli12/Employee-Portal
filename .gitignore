@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.ENV
+.env
+*.log
+.vscode/
+frontend/dist/
+frontend/src/
+Employee-Portal/

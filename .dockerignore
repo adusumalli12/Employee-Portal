@@ -1,0 +1,9 @@
+node_modules
+dist
+frontend/dist
+.env
+.git
+.vscode
+npm-debug.log
+error.log
+package-lock.json
