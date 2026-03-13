@@ -36,17 +36,17 @@ export function getEmailTransporter(): Transporter {
   if (!transporter) {
     const emailConfig: any = {
       host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // TLS
+      port: 465,
+      secure: true, // SSL/TLS
       pool: true,
       maxConnections: 5,
       maxMessages: 100,
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
+      connectionTimeout: 20000, 
+      greetingTimeout: 20000,
       socketTimeout: 60000,
-      // FORCE IPv4 at the socket level
+      // FORCE IPv4 everywhere
       family: 4, 
-      // FORCE IPv4 during DNS resolution
+      localAddress: '0.0.0.0', // Force local IPv4 interface
       lookup: (hostname: string, options: any, callback: any) => {
         dns.lookup(hostname, { family: 4 }, callback);
       },
