@@ -35,16 +35,21 @@ let transporter: Transporter | null = null;
 export function getEmailTransporter(): Transporter {
   if (!transporter) {
     const emailConfig: any = {
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // Use STARTTLS
+      // Direct IPv4 for smtp.gmail.com to bypass Render's broken IPv6 resolution
+      host: '74.125.142.108', 
+      port: 465,
+      secure: true,
       pool: true,
       maxConnections: 5,
       maxMessages: 100,
       connectionTimeout: 20000, 
       greetingTimeout: 20000,
       socketTimeout: 60000,
-      family: 4, // Force IPv4 at the socket level
+      tls: {
+        // Essential because we are connecting via IP but the cert is for smtp.gmail.com
+        servername: 'smtp.gmail.com',
+        rejectUnauthorized: false
+      },
       auth: {
         user: env.EMAIL_USER,
         pass: env.EMAIL_PASSWORD,
