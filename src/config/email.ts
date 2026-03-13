@@ -35,14 +35,21 @@ let transporter: Transporter | null = null;
 export function getEmailTransporter(): Transporter {
   if (!transporter) {
     const emailConfig: any = {
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // TLS
       pool: true,
       maxConnections: 5,
       maxMessages: 100,
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 60000,
-      family: 4, // Force IPv4
+      // FORCE IPv4 at the socket level
+      family: 4, 
+      // FORCE IPv4 during DNS resolution
+      lookup: (hostname: string, options: any, callback: any) => {
+        dns.lookup(hostname, { family: 4 }, callback);
+      },
       auth: {
         user: env.EMAIL_USER,
         pass: env.EMAIL_PASSWORD,
