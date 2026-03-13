@@ -5,5 +5,9 @@ dist/
 *.log
 .vscode/
 frontend/dist/
-frontend/src/
+debug_db.ts
+test_api.ts
+check_*.ts
+tmp/
 Employee-Portal/
+fix_dashboard*.js

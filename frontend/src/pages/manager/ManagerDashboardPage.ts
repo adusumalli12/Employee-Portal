@@ -1,5 +1,6 @@
-import { AuthService } from '../../services/AuthService';
-import { AttendanceService } from '../../services/AttendanceService';
+import { AuthService } from '../../services/auth.service';
+import { AttendanceService } from '../../services/attendance.service';
+import SocketService from '../../services/socket.service';
 import { Button } from '../../components/Button';
 import APIClient from '../../api/client';
 import * as dom from '../../utils/dom';
@@ -22,6 +23,22 @@ export const ManagerDashboardPage = () => {
     let notifications: any[] = [];
     let isNotificationOpen = false;
     let timerInterval: any = null;
+    let productivityChart: any = null;
+    let efficiencyChart: any = null;
+    let searchQuery = '';
+
+    // --- REAL-TIME NOTIFICATIONS ---
+    const unsubscribe = SocketService.onNotification((notification) => {
+        notifications = [notification, ...notifications];
+        renderTopBar();
+        // Refresh full data for real-time tracking if it's a task, leave, or registration event
+        if (['task_assigned', 'task_completed', 'leave_requested', 'leave_approved', 'leave_rejected', 'user_registered'].includes(notification.type)) {
+            fetchData();
+        } else {
+            refreshDashboard();
+        }
+        dom.showAlert(`New Alert: ${notification.title}`, "info");
+    });
 
     // --- MODAL FUNCTIONS (Hoisted) ---
     function showCreateTaskModal() {
@@ -460,9 +477,10 @@ export const ManagerDashboardPage = () => {
                 <span class="text-[10px] sm:text-xs font-bold text-slate-400 whitespace-nowrap">${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
             <div class="flex items-center gap-3 sm:gap-6 relative">
-                <div class="relative hidden sm:block">
-                    <input type="text" placeholder="Search..." class="bg-slate-50 border border-slate-100 rounded-full pl-8 pr-4 py-1.5 text-[10px] font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-32 md:w-64 transition-all">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">🔍</span>
+                <div class="relative flex-1 max-w-md mx-2 sm:mx-6 group">
+                    <input id="global-search" type="text" value="${searchQuery}" placeholder="Search team, tasks, or leaves..." 
+                        class="w-full bg-slate-50 border border-slate-100 rounded-full pl-10 pr-4 py-2.5 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all outline-none shadow-sm group-hover:border-indigo-200">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 group-focus-within:text-indigo-500 transition-colors">🔍</span>
                 </div>
                 <div class="flex items-center gap-2 relative">
                     <button id="notification-bell" class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all relative">
@@ -484,7 +502,7 @@ export const ManagerDashboardPage = () => {
                                         <p class="text-[9px] text-slate-500 font-medium leading-relaxed">${n.message}</p>
                                         <p class="text-[8px] text-slate-400 mt-2 font-bold">${new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
-                                `).join('')}
+                                    `).join('')}
                             </div>
                         </div>
                     ` : ''}
@@ -500,20 +518,39 @@ export const ManagerDashboardPage = () => {
 
         topBar.querySelector('#mark-all-read')?.addEventListener('click', async () => {
             await APIClient.markAllNotificationsRead();
-            notifications = notifications.map(n => ({ ...n, isRead: true }));
+            notifications = [];
             renderTopBar();
         });
 
         topBar.querySelectorAll('[data-nid]').forEach(item => {
             item.addEventListener('click', async () => {
                 const nid = item.getAttribute('data-nid');
-                if (nid) {
+                const n = notifications.find(notif => notif._id === nid);
+                
+                if (nid && n) {
                     await APIClient.markNotificationRead(nid);
-                    notifications = notifications.map(n => n._id === nid ? { ...n, isRead: true } : n);
-                    renderTopBar();
+                    notifications = notifications.filter(notif => notif._id !== nid);
+                    
+                    if (['leave_requested', 'leave_approved', 'leave_rejected'].includes(n.type)) {
+                        currentMainTab = 'leaves';
+                        isNotificationOpen = false;
+                        refreshDashboard();
+                        renderSidebar();
+                    } else {
+                        isNotificationOpen = notifications.length > 0;
+                        renderTopBar();
+                    }
                 }
             });
         });
+
+        const searchInput = topBar.querySelector('#global-search') as HTMLInputElement;
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = (e.target as HTMLInputElement).value;
+                refreshDashboard();
+            });
+        }
     };
 
     mainContainer.appendChild(topBar);
@@ -581,7 +618,7 @@ export const ManagerDashboardPage = () => {
                     ? (st.isOnBreak
                         ? st.totalSecondsToday
                         : st.totalSecondsToday + (st.clockInTime ? Math.floor((Date.now() - st.clockInTime) / 1000) : 0))
-                    : st.totalSecondsToday;
+                    : 0; // Reset to 00:00:00 when not working as requested
                 const h = Math.floor(displaySeconds / 3600);
                 const m = Math.floor((displaySeconds % 3600) / 60);
                 const s = displaySeconds % 60;
@@ -738,7 +775,17 @@ export const ManagerDashboardPage = () => {
     teamSection.className = "bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm flex flex-col";
 
     const renderTeamUI = () => {
-        const listToDisplay = activeTab === 'team' ? myTeam : allEmployees.filter(emp => !myTeam.some(m => m._id === emp._id) && emp._id !== user?.id);
+        const query = searchQuery.toLowerCase();
+        let listToDisplay = activeTab === 'team' ? myTeam : allEmployees.filter(emp => !myTeam.some(m => m._id === emp._id) && emp._id !== user?.id);
+
+        if (query) {
+            listToDisplay = listToDisplay.filter(emp => 
+                emp.name?.toLowerCase().includes(query) || 
+                emp.position?.toLowerCase().includes(query) || 
+                emp.location?.toLowerCase().includes(query) ||
+                emp.email?.toLowerCase().includes(query)
+            );
+        }
 
         teamSection.innerHTML = `
             <div class="px-8 py-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -948,6 +995,7 @@ export const ManagerDashboardPage = () => {
                 </div>
             </div>
         `;
+
         return container;
     };
 
@@ -957,15 +1005,24 @@ export const ManagerDashboardPage = () => {
         container.className = "flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20";
 
         const chartHeader = (title: string, subtitle: string) => `
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex flex-col mb-4">
+              <h3 class="text-[10px] font-black text-slate-400 tracking-widest uppercase mb-0.5">${title}</h3>
+              <p class="text-xs font-black text-slate-900 uppercase tracking-widest">${subtitle}</p>
+            </div>
+        `;
+
+        const chartToolbar = (title: string, subtitle: string, id: string) => `
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
-                  <h3 class="text-[10px] font-black text-slate-400 tracking-widest uppercase">${title}</h3>
-                  <p class="text-lg font-black text-slate-900 tracking-tight mt-0.5">${subtitle}</p>
+                   <h3 class="text-[10px] font-black text-slate-400 tracking-widest uppercase mb-0.5">${title}</h3>
+                   <p class="text-xs font-black text-slate-900 uppercase tracking-widest">${subtitle}</p>
                 </div>
-                <div class="flex items-center gap-1.5">
-                    <button id="add-task-trigger" class="w-10 h-10 flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:scale-105 transition-all shadow-lg shadow-indigo-100" title="Assign New Task">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg>
-                    </button>
+                <div class="flex items-center gap-1.5 bg-slate-50 p-1 rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md">
+                    <button data-action="sync" data-chart="${id}" title="Force Real-time Sync" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg></button>
+                    <button data-action="minimize" data-chart="${id}" title="Collapse Chart" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4"></path></svg></button>
+                    <button data-action="search" data-chart="${id}" title="Analyze Details" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                    <button data-action="home" data-chart="${id}" title="Reset View" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
+                    <button data-action="menu" data-chart="${id}" title="More Options" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
                 </div>
             </div>
         `;
@@ -973,9 +1030,18 @@ export const ManagerDashboardPage = () => {
         const members = teamIntelligence?.members || [];
         const totals = teamIntelligence?.totals || { done: 0, pending: 0 };
 
-        // Auto-select first member if none selected
-        if (!selectedMemberId && members.length > 0) {
-            selectedMemberId = members[0]._id;
+        const query = searchQuery.toLowerCase();
+        const filteredMembers = query ? members.filter((m: any) => 
+            m.name?.toLowerCase().includes(query) || 
+            m.position?.toLowerCase().includes(query)
+        ) : members;
+
+        if (filteredMembers.length > 0) {
+            if (!filteredMembers.find((m: any) => m._id === selectedMemberId)) {
+                selectedMemberId = filteredMembers[0]._id;
+            }
+        } else {
+            selectedMemberId = null;
         }
 
         container.innerHTML = `
@@ -996,11 +1062,65 @@ export const ManagerDashboardPage = () => {
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Productivity & Efficiency Analytics (NEW) -->
+                <div class="lg:col-span-12 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-50/30 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-indigo-100/30 transition-all duration-1000"></div>
+                    
+                    <div class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <!-- Productivity Flow -->
+                        <div class="space-y-6">
+                            ${chartToolbar('Operation Rhythm', 'Productivity Flow over Time', 'manager-prod')}
+                            <div class="h-[280px] w-full" id="manager-prod-content">
+                                <canvas id="managerProductivityChart"></canvas>
+                            </div>
+                            <div class="flex justify-center gap-8 mt-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-[#F59E0B]"></div>
+                                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Input (Tasks In)</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-[#6366F1]"></div>
+                                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Output (Tasks Out)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Task Efficiency -->
+                        <div class="space-y-6">
+                            ${chartToolbar('Accuracy & Precision', 'Task Efficiency (Success Vs Failure)', 'manager-eff')}
+                            <div class="h-[280px] w-full" id="manager-eff-content">
+                                <canvas id="managerEfficiencyChart"></canvas>
+                            </div>
+                            <div class="flex justify-center gap-8 mt-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-[#10B981]"></div>
+                                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Efficiency %</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-[#EF4444]"></div>
+                                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Review Errors</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Team Workload Distribution (List) -->
                 <div class="lg:col-span-5 bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col h-fit">
                     ${chartHeader('Distribution', 'Workload Engine')}
                     <div class="space-y-3 mt-4 overflow-y-auto max-h-[500px] pr-2">
-                        ${members.length > 0 ? members.map((m: any) => {
+                        ${(() => {
+                            const query = searchQuery.toLowerCase();
+                            const filteredMembers = query ? members.filter((m: any) => 
+                                m.name?.toLowerCase().includes(query) || 
+                                m.position?.toLowerCase().includes(query)
+                            ) : members;
+
+                            if (filteredMembers.length === 0) {
+                                return `<p class="text-center py-10 text-slate-400 italic">${query ? 'No matching members' : 'No team members available'}</p>`;
+                            }
+
+                            return filteredMembers.map((m: any) => {
             const total = m.tasks.todo + m.tasks.inProgress + m.tasks.review + m.tasks.done;
             const isSelected = selectedMemberId === m._id;
             const completionRate = total > 0 ? Math.round((m.tasks.done / total) * 100) : 0;
@@ -1031,7 +1151,8 @@ export const ManagerDashboardPage = () => {
                                 </div>
                             </div>
                         `;
-        }).join('') : '<p class="text-center py-10 text-slate-400 italic">No team members available.</p>'}
+        }).join('');
+                        })()}
                     </div>
                 </div>
 
@@ -1052,7 +1173,12 @@ export const ManagerDashboardPage = () => {
             const member = members.find((m: any) => m._id === selectedMemberId);
             if (!member) return '';
 
-            const tasks = allTeamTasks.filter(t => (t.employee?._id || t.employee) === selectedMemberId);
+            const query = searchQuery.toLowerCase();
+            const memberTasks = allTeamTasks.filter(t => (t.employee?._id || t.employee) === selectedMemberId);
+            const tasks = query ? memberTasks.filter(t => 
+                t.title?.toLowerCase().includes(query) || 
+                t.description?.toLowerCase().includes(query)
+            ) : memberTasks;
 
             return `
                 <div class="flex justify-between items-center mb-10 border-b border-slate-50 pb-8">
@@ -1125,6 +1251,121 @@ export const ManagerDashboardPage = () => {
                 const taskId = card.getAttribute('data-task-id');
                 const task = allTeamTasks.find(t => t._id === taskId);
                 if (task) showEditTaskModal(task);
+            });
+        });
+
+        // Initialize Charts (Optimized)
+        setTimeout(() => {
+            const prodCtx = (container.querySelector('#managerProductivityChart') as HTMLCanvasElement)?.getContext('2d');
+            const effCtx = (container.querySelector('#managerEfficiencyChart') as HTMLCanvasElement)?.getContext('2d');
+
+            if (!prodCtx || !effCtx || !teamIntelligence?.graphs) return;
+
+            if (productivityChart && efficiencyChart && !teamIntelligence._dataChangedSinceLastRender) {
+                return;
+            }
+            teamIntelligence._dataChangedSinceLastRender = false;
+
+            if (productivityChart) productivityChart.destroy();
+            if (efficiencyChart) efficiencyChart.destroy();
+
+            // @ts-ignore
+            productivityChart = new Chart(prodCtx, {
+                type: 'line',
+                data: {
+                    labels: teamIntelligence.graphs.productivityFlow.map((d: any) => d.time),
+                    datasets: [
+                        {
+                            label: 'Input',
+                            data: teamIntelligence.graphs.productivityFlow.map((d: any) => d.input),
+                            borderColor: '#F59E0B',
+                            backgroundColor: '#F59E0B',
+                            tension: 0.4,
+                            borderWidth: 4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Output',
+                            data: teamIntelligence.graphs.productivityFlow.map((d: any) => d.output),
+                            borderColor: '#6366F1',
+                            backgroundColor: '#6366F1',
+                            tension: 0.4,
+                            borderWidth: 4,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        y: { beginAtZero: true, grid: { display: false }, ticks: { display: false } },
+                        x: { grid: { display: false }, ticks: { font: { size: 9, weight: 'bold' }, color: '#94A3B8' } }
+                    }
+                }
+            });
+
+            // @ts-ignore
+            efficiencyChart = new Chart(effCtx, {
+                type: 'line',
+                data: {
+                    labels: teamIntelligence.graphs.efficiencyMetrics.map((d: any) => d.time),
+                    datasets: [
+                        {
+                            label: 'Efficiency',
+                            data: teamIntelligence.graphs.efficiencyMetrics.map((d: any) => d.efficiency),
+                            borderColor: '#10B981',
+                            backgroundColor: '#10B981',
+                            tension: 0.4,
+                            borderWidth: 4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Errors',
+                            data: teamIntelligence.graphs.efficiencyMetrics.map((d: any) => d.errors),
+                            borderColor: '#EF4444',
+                            backgroundColor: '#EF4444',
+                            tension: 0.4,
+                            borderWidth: 4,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        y: { beginAtZero: true, grid: { display: false }, ticks: { display: false } },
+                        x: { grid: { display: false }, ticks: { font: { size: 9, weight: 'bold' }, color: '#94A3B8' } }
+                    }
+                }
+            });
+        }, 100);
+
+        container.querySelectorAll('button[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = (e.currentTarget as HTMLElement).dataset.action;
+                if (action === 'sync') {
+                    dom.showAlert('Initiating deep sync with protocol server...', 'info');
+                    fetchData();
+                } else if (action === 'home') {
+                    currentMainTab = 'overview';
+                    refreshDashboard();
+                } else if (action === 'search') {
+                    currentMainTab = 'reports';
+                    refreshDashboard();
+                } else if (action === 'minimize') {
+                    const chartId = (e.currentTarget as HTMLElement).dataset.chart;
+                    const content = container.querySelector(`#${chartId}-content`);
+                    if (content) {
+                        content.classList.toggle('hidden');
+                        dom.showAlert(content.classList.contains('hidden') ? 'Metric view collapsed' : 'Metric view expanded', 'info');
+                    }
+                } else if (action === 'menu') {
+                    dom.showAlert('Managerial export protocols restricted to administrators.', 'warning');
+                }
             });
         });
 
@@ -1548,43 +1789,90 @@ export const ManagerDashboardPage = () => {
                             <span class="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-100">${teamLeaves.filter(l => l.status === 'pending').length} Pending</span>
                         </div>
                         
-                        <div class="divide-y divide-slate-100">
-                            ${teamLeaves.length === 0 ? `
-                                <div class="px-8 py-20 text-center text-slate-400 font-bold italic">No leave requests found in the system.</div>
-                            ` : teamLeaves.map(leave => `
-                                <div class="px-8 py-6 hover:bg-slate-50/50 transition-colors group">
-                                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div class="p-8 pb-4">
+                            <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6">Pending Requests</h4>
+                            <div class="space-y-4">
+                                ${(() => {
+                                    const query = searchQuery.toLowerCase();
+                                    const pending = teamLeaves.filter(l => l.status === 'pending');
+                                    const filtered = query ? pending.filter(l => 
+                                        l.employee?.name?.toLowerCase().includes(query) || 
+                                        l.reason?.toLowerCase().includes(query) || 
+                                        l.type?.toLowerCase().includes(query)
+                                    ) : pending;
+
+                                    return filtered.map(leave => `
+                                    <div class="p-6 bg-slate-50/50 hover:bg-white hover:shadow-xl hover:border-indigo-100 transition-all rounded-3xl border-2 border-slate-50 group">
+                                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                            <div class="flex items-center gap-4">
+                                                <div class="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform">
+                                                    ${leave.type === 'sick' ? '🤒' : (leave.type === 'vacation' ? '🏖️' : '🏠')}
+                                                </div>
+                                                <div>
+                                                    <div class="flex items-center gap-2">
+                                                        <h4 class="text-sm font-black text-slate-900">${leave.employee?.name || 'Unknown'}</h4>
+                                                        <span class="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black uppercase tracking-widest">${leave.type}</span>
+                                                    </div>
+                                                    <p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">
+                                                        ${new Date(leave.startDate).toLocaleDateString()} — ${new Date(leave.endDate).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="flex items-center gap-3 w-full md:w-auto">
+                                                <button data-action="approve" data-id="${leave._id}" class="flex-1 md:flex-none px-6 py-2.5 bg-emerald-600 text-white hover:bg-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-100/50">Approve</button>
+                                                <button data-action="reject" data-id="${leave._id}" class="flex-1 md:flex-none px-6 py-2.5 bg-white text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 border-rose-100">Reject</button>
+                                            </div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-white/50 rounded-2xl border border-slate-100/50">
+                                            <p class="text-[11px] font-bold text-slate-500 italic">"${leave.reason}"</p>
+                                        </div>
+                                    </div>
+                                    `).join('') + (filtered.length === 0 ? `<div class="py-10 text-center text-slate-400 font-bold italic border-2 border-dashed border-slate-100 rounded-3xl">No ${query ? 'matching' : 'pending'} requests at this time.</div>` : '');
+                                })()}
+                            </div>
+                        </div>
+
+                        <div class="p-8 border-t border-slate-50">
+                            <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6">Completed History</h4>
+                            <div class="space-y-3">
+                                ${(() => {
+                                    const query = searchQuery.toLowerCase();
+                                    const history = teamLeaves.filter(l => l.status !== 'pending');
+                                    const filtered = query ? history.filter(l => 
+                                        l.employee?.name?.toLowerCase().includes(query) || 
+                                        l.status?.toLowerCase().includes(query) || 
+                                        l.type?.toLowerCase().includes(query)
+                                    ) : history;
+
+                                    if (filtered.length === 0) {
+                                        return `<div class="py-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest">${query ? 'No matching results' : 'Archive Empty'}</div>`;
+                                    }
+
+                                    return filtered.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).map(leave => `
+                                    <div class="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 border border-slate-100 hover:bg-white transition-all group">
                                         <div class="flex items-center gap-4">
-                                            <div class="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-xl shadow-sm">
+                                            <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-lg border border-slate-100 grayscale group-hover:grayscale-0 transition-all">
                                                 ${leave.type === 'sick' ? '🤒' : (leave.type === 'vacation' ? '🏖️' : '🏠')}
                                             </div>
                                             <div>
-                                                <div class="flex items-center gap-2">
-                                                    <h4 class="text-sm font-black text-slate-900">${leave.employee?.name || 'Unknown'}</h4>
-                                                    <span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase tracking-widest">${leave.type}</span>
-                                                </div>
-                                                <p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">
-                                                    ${new Date(leave.startDate).toLocaleDateString()} — ${new Date(leave.endDate).toLocaleDateString()}
-                                                </p>
+                                                <p class="text-xs font-black text-slate-700">${leave.employee?.name || 'Unknown'}</p>
+                                                <p class="text-[9px] text-slate-400 font-bold uppercase tracking-widest">${new Date(leave.startDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})} - ${new Date(leave.endDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</p>
                                             </div>
                                         </div>
-                                        
-                                        <div class="flex items-center gap-3 w-full md:w-auto">
-                                            ${leave.status === 'pending' ? `
-                                                <button data-action="approve" data-id="${leave._id}" class="flex-1 md:flex-none px-5 py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-emerald-100">Approve</button>
-                                                <button data-action="reject" data-id="${leave._id}" class="flex-1 md:flex-none px-5 py-2.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-rose-100">Reject</button>
-                                            ` : `
-                                                <span class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
-                                                    ${leave.status}
-                                                </span>
-                                            `}
+                                        <div class="flex items-center gap-4">
+                                            <div class="text-right hidden sm:block">
+                                                <p class="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Decision Date</p>
+                                                <p class="text-[10px] font-bold text-slate-500">${new Date(leave.updatedAt || leave.createdAt).toLocaleDateString()}</p>
+                                            </div>
+                                            <span class="px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest ${leave.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}">
+                                                ${leave.status}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div class="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                        <p class="text-[11px] font-bold text-slate-500 italic">"${leave.reason}"</p>
-                                    </div>
-                                </div>
-                            `).join('')}
+                                    `).join('');
+                                })()}
+                            </div>
                         </div>
                     </div>
 
@@ -1618,7 +1906,7 @@ export const ManagerDashboardPage = () => {
                                             </div>
                                         </div>
                                     </div>
-                                `).join('')}
+                                    `).join('')}
                             </div>
                             <button id="btn-view-all-holidays" class="w-full mt-8 py-4 bg-slate-50 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all border border-slate-100">Annual Calendar →</button>
                         </div>
@@ -1716,11 +2004,27 @@ export const ManagerDashboardPage = () => {
 
     // 10. General Refresh/Tab Logic
     const refreshDashboard = () => {
+        const searchInput = document.getElementById('global-search') as HTMLInputElement;
+        const isSearchFocused = document.activeElement === searchInput;
+        const selectionStart = searchInput?.selectionStart;
+        const selectionEnd = searchInput?.selectionEnd;
+
         main.innerHTML = '';
         renderSidebar();
         renderTopBar();
         renderHeaderTitle();
         main.appendChild(header);
+
+        // Restore focus
+        if (isSearchFocused) {
+            requestAnimationFrame(() => {
+                const s = document.getElementById('global-search') as HTMLInputElement;
+                if (s) {
+                    s.focus();
+                    if (selectionStart !== null) s.setSelectionRange(selectionStart, selectionEnd || selectionStart);
+                }
+            });
+        }
 
         // Attach Quick Task Listener
         header.querySelector('#quick-task-btn')?.addEventListener('click', () => showCreateTaskModal());
@@ -1738,24 +2042,40 @@ export const ManagerDashboardPage = () => {
             quickTeam.innerHTML = `
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="text-xs font-black uppercase tracking-widest text-slate-900">My Team</h3>
-                    <span class="text-xs font-bold text-indigo-600">View All →</span>
+                    <span id="view-all-team-btn" class="text-xs font-bold text-indigo-600 cursor-pointer hover:underline underline-offset-4">View All →</span>
                 </div>
                 <div class="space-y-4 flex-1">
-                    ${myTeam.slice(0, 4).map(m => `
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500">
-                                ${m.name[0]}
+                    ${(() => {
+                        const query = searchQuery.toLowerCase();
+                        const filteredTeam = query ? myTeam.filter(m => 
+                            m.name?.toLowerCase().includes(query) || 
+                            m.position?.toLowerCase().includes(query)
+                        ) : myTeam;
+
+                        if (filteredTeam.length === 0) {
+                            return `<p class="text-xs text-slate-400 italic text-center py-4">${query ? 'No matching members' : 'No team members yet'}</p>`;
+                        }
+
+                        return filteredTeam.slice(0, 4).map(m => `
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500">
+                                    ${m.name[0]}
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-xs font-bold text-slate-900 leading-none">${m.name}</p>
+                                    <p class="text-[9px] text-slate-400 font-medium mt-1 uppercase">${m.position}</p>
+                                </div>
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             </div>
-                            <div class="flex-1">
-                                <p class="text-xs font-bold text-slate-900 leading-none">${m.name}</p>
-                                <p class="text-[9px] text-slate-400 font-medium mt-1 uppercase">${m.position}</p>
-                            </div>
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        </div>
-                    `).join('')}
-                    ${myTeam.length === 0 ? '<p class="text-xs text-slate-400 italic text-center py-4">No team members yet</p>' : ''}
+                        `).join('');
+                    })()}
                 </div>
             `;
+
+            quickTeam.querySelector('#view-all-team-btn')?.addEventListener('click', () => {
+                currentMainTab = 'team';
+                refreshDashboard();
+            });
 
             topGrid.appendChild(attendanceCard);
             topGrid.appendChild(quickTeam);
@@ -1814,7 +2134,15 @@ export const ManagerDashboardPage = () => {
                     <button id="view-all-intel" class="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">Intel Hub →</button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    ${allTeamTasks.slice(0, 4).map(t => `
+                    ${(() => {
+                        const query = searchQuery.toLowerCase();
+                        const filtered = query ? allTeamTasks.filter(t => 
+                            t.title?.toLowerCase().includes(query) || 
+                            t.description?.toLowerCase().includes(query) || 
+                            t.employee?.name?.toLowerCase().includes(query)
+                        ) : allTeamTasks;
+
+                        return filtered.slice(0, 4).map(t => `
                         <div class="p-6 rounded-[2rem] bg-slate-50 border border-slate-100/50 hover:border-indigo-200 transition-all group">
                             <div class="flex justify-between items-start mb-4">
                                 <div class="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform">
@@ -1827,8 +2155,8 @@ export const ManagerDashboardPage = () => {
                             <h4 class="text-[11px] font-black text-slate-900 truncate">${t.title}</h4>
                             <p class="text-[9px] text-slate-400 font-bold uppercase mt-1">Assigned to ${t.employee?.name || 'Unknown'}</p>
                         </div>
-                    `).join('')}
-                    ${allTeamTasks.length === 0 ? '<p class="text-xs text-slate-400 italic col-span-full py-10 text-center">No active protocols detected.</p>' : ''}
+                    `).join('') + (filtered.length === 0 ? '<p class="text-xs text-slate-400 italic col-span-full py-10 text-center">No matching protocols detected.</p>' : '');
+                    })()}
                 </div>
             `;
             tasksWidget.querySelector('#view-all-intel')?.addEventListener('click', () => {
@@ -1868,7 +2196,10 @@ export const ManagerDashboardPage = () => {
                 allEmployees = (allRes.data as any[]).filter(e => e.role === 'user' || e._id === user?.id);
             }
             if (statsRes?.success) stats = statsRes;
-            if (intelligenceRes.success) teamIntelligence = intelligenceRes.data;
+            if (intelligenceRes.success) {
+                teamIntelligence = intelligenceRes.data;
+                teamIntelligence._dataChangedSinceLastRender = true;
+            }
             if (leaveRes.success) teamLeaves = leaveRes.data;
             if (taskRes.success) allTeamTasks = taskRes.data;
             if (notifRes.success) {
@@ -1910,7 +2241,7 @@ export const ManagerDashboardPage = () => {
             ? (st.isOnBreak
                 ? st.totalSecondsToday
                 : st.totalSecondsToday + (st.clockInTime ? Math.floor((Date.now() - st.clockInTime) / 1000) : 0))
-            : st.totalSecondsToday;
+            : 0; // Reset to 00:00:00 when not working as requested
 
         const h = Math.floor(displaySeconds / 3600);
         const m = Math.floor((displaySeconds % 3600) / 60);

@@ -1,4 +1,4 @@
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { Button } from '../../components/Button';
 import * as dom from '../../utils/dom';
@@ -40,10 +40,6 @@ export const AdminApprovalPage = () => {
         <p class="text-slate-500 font-medium mt-1">Review and approve pending manager accounts.</p>
     `;
     main.appendChild(header);
-
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-    main.appendChild(alertContainer);
 
     const tableContainer = document.createElement('div');
     tableContainer.className = "bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm";

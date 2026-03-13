@@ -1,7 +1,7 @@
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { SESSION_KEYS, TIMEOUTS, PAGES } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -25,9 +25,6 @@ export const ForgotPasswordPage = () => {
         required: true
     });
 
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-
     const submitBtn = Button({
         text: "Send Reset Link →",
         type: "submit",
@@ -39,7 +36,6 @@ export const ForgotPasswordPage = () => {
     footer.className = "text-center mt-6 text-sm font-medium";
     footer.innerHTML = `<p class="text-slate-600">Remember your password? <a href="#/login" class="text-indigo-600 hover:text-indigo-800 transition-colors">Back to Login</a></p>`;
 
-    form.appendChild(alertContainer);
     form.appendChild(emailInput.container);
     form.appendChild(submitBtn);
     form.appendChild(footer);

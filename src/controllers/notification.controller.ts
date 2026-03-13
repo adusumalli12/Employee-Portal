@@ -1,12 +1,13 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
-import { Notification } from '../models/Notification';
+import { Notification } from '../models/notification.model';
 import { HTTP_STATUS } from '../utils/constants';
 import { asyncHandler } from '../middleware/errorHandler';
 
 export const getMyNotifications = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
     const recipientId = req.user?.id;
-    const notifications = await Notification.find({ recipient: recipientId })
+    // We only fetch unread notifications because read ones are meant to be "deleted"
+    const notifications = await Notification.find({ recipient: recipientId, isRead: false })
         .sort({ createdAt: -1 })
         .limit(20);
 
@@ -18,21 +19,23 @@ export const getMyNotifications = asyncHandler(async (req: AuthRequest, res: Res
 
 export const markAsRead = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
     const { notificationId } = req.params;
-    await Notification.findByIdAndUpdate(notificationId, { isRead: true });
+    // Instead of just marking as read, we delete it to fulfill the "auto-delete" requirement
+    await Notification.findByIdAndDelete(notificationId);
 
     res.status(HTTP_STATUS.OK).json({
         success: true,
-        message: 'Notification marked as read'
+        message: 'Notification deleted successfully'
     });
 });
 
 export const markAllAsRead = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
     const recipientId = req.user?.id;
-    await Notification.updateMany({ recipient: recipientId, isRead: false }, { isRead: true });
+    // Delete all unread notifications for this user
+    await Notification.deleteMany({ recipient: recipientId });
 
     res.status(HTTP_STATUS.OK).json({
         success: true,
-        message: 'All notifications marked as read'
+        message: 'All notifications cleared'
     });
 });
 

@@ -1,9 +1,11 @@
 node_modules
 dist
 frontend/dist
-.env
 .git
+.env
+*.md
+docker-compose.yml
+Dockerfile
 .vscode
-npm-debug.log
-error.log
-package-lock.json
+scripts/*.ts
+tmp

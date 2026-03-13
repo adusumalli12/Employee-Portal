@@ -1,6 +1,6 @@
 import env from '../config/environment';
 import { sendEmail } from '../config/email';
-import * as emailTemplates from './emailTemplates';
+import * as emailTemplates from './email.templates';
 
 interface SendEmailResult {
   success: boolean;
@@ -154,6 +154,120 @@ class EmailService {
     } catch (error: any) {
       console.error('[Email] Error sending manager approval email:', error.message);
       throw new Error(`Failed to send approval email: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send leave request email to manager
+   */
+  static async sendLeaveRequestedEmail(
+    managerEmail: string,
+    managerName: string,
+    employeeName: string,
+    type: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<SendEmailResult> {
+    try {
+      const template = emailTemplates.leaveRequestedEmail(
+        managerName,
+        employeeName,
+        type,
+        startDate.toDateString(),
+        endDate.toDateString()
+      );
+
+      await sendEmail({
+        to: managerEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+
+      return { success: true, message: 'Leave request email sent to manager' };
+    } catch (error: any) {
+      console.error('[Email] Error sending leave requested email:', error.message);
+      return { success: false, message: 'Failed to send leave request email' };
+    }
+  }
+
+  /**
+   * Send leave status email to employee
+   */
+  static async sendLeaveStatusEmail(
+    employeeEmail: string,
+    employeeName: string,
+    status: string,
+    leaveType: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<SendEmailResult> {
+    try {
+      const template = emailTemplates.leaveStatusNotificationEmail(
+        employeeName,
+        status,
+        leaveType,
+        startDate.toDateString(),
+        endDate.toDateString()
+      );
+
+      await sendEmail({
+        to: employeeEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+
+      return { success: true, message: 'Leave status email sent to employee' };
+    } catch (error: any) {
+      console.error('[Email] Error sending leave status email:', error.message);
+      return { success: false, message: 'Failed to send leave status email' };
+    }
+  }
+
+  /**
+   * Send manager approval notification
+   */
+  static async sendManagerApprovedEmail(email: string, name: string): Promise<SendEmailResult> {
+    try {
+      const template = emailTemplates.managerApprovedEmail(name);
+
+      await sendEmail({
+        to: email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+
+      console.log(`[Email] Manager approval email sent to ${email}`);
+      return { success: true, message: 'Approval email sent successfully' };
+    } catch (error: any) {
+      console.error('[Email] Error sending manager approval email:', error.message);
+      throw new Error(`Failed to send approval email: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generic send email method
+   */
+  static async sendEmail(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string
+  ): Promise<SendEmailResult> {
+    try {
+      await sendEmail({
+        to,
+        subject,
+        text,
+        html: html || text.replace(/\n/g, '<br>'),
+      });
+
+      return { success: true, message: 'Email sent successfully' };
+    } catch (error: any) {
+      console.error('[Email] Generic send error:', error.message);
+      throw new Error(`Failed to send email: ${error.message}`);
     }
   }
 }

@@ -1,10 +1,10 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
-import { Task } from '../models/Task';
-import { Employee } from '../models/Employee';
+import { Task } from '../models/task.model';
+import { Employee } from '../models/employee.model';
 import { HTTP_STATUS } from '../utils/constants';
 import { asyncHandler } from '../middleware/errorHandler';
-import { Notification } from '../models/Notification';
+import { Notification } from '../models/notification.model';
 
 /**
  * Task Controller
@@ -88,17 +88,15 @@ export const updateTaskStatus = asyncHandler(async (req: AuthRequest, res: Respo
         return;
     }
 
-    if (status === 'done' && task) {
-        // Notify manager
-        await Notification.create({
-            recipient: task.createdBy,
-            sender: req.user?.id,
-            title: 'Task Completed',
-            message: `${req.user?.name || 'An employee'} has completed the task: ${task.title}`,
-            type: 'task_completed',
-            relatedId: task._id
-        });
-    }
+    // Notify manager/creator on ANY status change
+    await Notification.create({
+        recipient: task.createdBy,
+        sender: req.user?.id,
+        title: 'Task Progress Update',
+        message: `${req.user?.name || 'An employee'} updated the task "${task.title}" to "${status}"`,
+        type: 'task_completed', // Keep as task_completed for simplicity or create 'task_updated'
+        relatedId: task._id
+    });
 
     res.status(HTTP_STATUS.OK).json({
         success: true,
@@ -166,6 +164,16 @@ export const updateTask = asyncHandler(async (req: AuthRequest, res: Response): 
         message: 'Task updated successfully',
         data: task
     });
+
+    // Notify assignee about the update
+    Notification.create({
+        recipient: task.employee as any,
+        sender: req.user?.id,
+        title: 'Task Modified',
+        message: `Your task "${task.title}" has been updated by your manager.`,
+        type: 'task_assigned',
+        relatedId: task._id
+    }).catch(err => console.error('Error creating notification for task update:', err));
 });
 
 export const getMyTasks = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {

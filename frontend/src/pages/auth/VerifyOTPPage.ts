@@ -1,7 +1,7 @@
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { SESSION_KEYS, TIMEOUTS, PAGES } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -45,9 +45,6 @@ export const VerifyOTPPage = () => {
     });
     otpInput.input.maxLength = 6;
 
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-
     const submitBtn = Button({
         text: "Verify Account →",
         type: "submit",
@@ -68,7 +65,6 @@ export const VerifyOTPPage = () => {
         }
     };
 
-    form.appendChild(alertContainer);
     form.appendChild(otpInput.container);
     form.appendChild(submitBtn);
     form.appendChild(resendLink);
@@ -100,7 +96,7 @@ export const VerifyOTPPage = () => {
 
                 dom.showAlert('Identity Verified! Accessing your workspace...', 'success');
 
-                const target = AuthService.isManager() ? PAGES.MANAGER_DASHBOARD : PAGES.DASHBOARD;
+                const target = AuthService.getDashboardPath();
                 setTimeout(() => window.location.hash = target, TIMEOUTS.MEDIUM);
             }
         } catch (error: any) {

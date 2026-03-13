@@ -7,6 +7,7 @@ export interface ILeave extends Document {
     endDate: Date;
     reason: string;
     status: 'pending' | 'approved' | 'rejected';
+    completedAt?: Date;
     appliedAt: Date;
     updatedAt: Date;
 }
@@ -25,7 +26,11 @@ const LeaveSchema: Schema = new Schema({
         type: String,
         enum: ['pending', 'approved', 'rejected'],
         default: 'pending'
-    }
+    },
+    completedAt: { type: Date }
 }, { timestamps: true });
+
+// TTL Index: Delete completed leave requests after 72 hours
+LeaveSchema.index({ completedAt: 1 }, { expireAfterSeconds: 259200 });
 
 export const Leave = mongoose.model<ILeave>('Leave', LeaveSchema);

@@ -1,15 +1,17 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
-import { Employee } from '../models/Employee';
+import { Employee } from '../models/employee.model';
 import {
   generateToken,
   generatePasswordResetToken,
   generateEmailVerificationToken
-} from '../utils/tokenGenerator';
+} from '../utils/token-generator';
 import OTPService from '../services/otp.service';
 import EmailService from '../services/email.service';
 import env from '../config/environment';
 import { HTTP_STATUS, ResponseMessages } from '../utils/constants';
+import { Notification } from '../models/notification.model';
+import { emitNotification } from '../utils/socket';
 
 /**
  * Auth Controller
@@ -51,7 +53,10 @@ export async function signup(req: AuthRequest, res: Response): Promise<void> {
   }
 
   // 3. Create new employee
-  // Password hashing is handled by the pre-save hook in Employee model
+  const isInitialAdmin = email.toLowerCase() === env.INITIAL_ADMIN_EMAIL.toLowerCase();
+  const assignedRole = isInitialAdmin ? 'superadmin' : (role || 'user');
+  const needsApproval = assignedRole === 'manager';
+
   const employee = new Employee({
     name,
     email,
@@ -62,8 +67,8 @@ export async function signup(req: AuthRequest, res: Response): Promise<void> {
     salary,
     experience,
     phoneNumber,
-    role: role || 'user',
-    isApproved: true, // Everyone is auto-approved now
+    role: assignedRole,
+    isApproved: !needsApproval, // Managers need approval, others (including superadmin) don't
   });
 
   // 4. Generate verification token
@@ -81,6 +86,8 @@ export async function signup(req: AuthRequest, res: Response): Promise<void> {
 
   EmailService.sendVerificationEmail(email, name, verificationLink)
     .catch(emailError => console.error('[Signup] Background email error:', emailError));
+
+    // Notifications are defered until email verification
 
   // 6. Return response (excluding password)
   const userData = employee.toObject();
@@ -137,9 +144,16 @@ export async function login(req: AuthRequest, res: Response): Promise<void> {
     return;
   }
 
-  // Approval check removed as per user request (Managers & Users are auto-approved)
+  // 5. Check if approved (Super Admin is always approved)
+  if (!employee.isApproved && employee.role !== 'superadmin') {
+    res.status(HTTP_STATUS.UNAUTHORIZED).json({
+      success: false,
+      message: 'Your account is pending administrative approval. You will receive an email once verified.',
+    });
+    return;
+  }
 
-  // 5. Generate token
+  // 6. Generate token
   const token = generateToken({
     id: employee._id.toString(),
     email: employee.email,
@@ -188,7 +202,63 @@ export async function verifyEmail(req: AuthRequest, res: Response): Promise<void
   employee.emailVerificationExpiry = null;
   await employee.save();
 
-  // 5. Generate token for auto-login after verification
+  // 5. Check if approved (Super Admin is always approved)
+  if (!employee.isApproved && employee.role !== 'superadmin') {
+    // Notify Manager via Email
+    EmailService.sendManagerApprovalEmail(employee.email, employee.name)
+        .catch(err => console.error('Error sending manager approval email:', err));
+
+    // Notify SuperAdmins about verified manager needing approval
+    (async () => {
+      try {
+        const administrators = await Employee.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id');
+        for (const admin of administrators) {
+          const notification = await Notification.create({
+            recipient: admin._id,
+            sender: employee._id,
+            title: 'New Manager Registry',
+            message: `${employee.name} has verified their email and requires administrative approval for their ${employee.location} office role.`,
+            type: 'user_registered',
+            relatedId: employee._id
+          });
+          
+          // Emit real-time socket notification
+          emitNotification(admin._id.toString(), notification);
+        }
+      } catch (err) {
+        console.error('Error notifying admins about verified manager signup:', err);
+      }
+    })();
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: 'Email verified successfully. Your account is now pending administrative approval.',
+      isApproved: false
+    });
+    return;
+  } else {
+    // Notify team about new approved user (like a standard User)
+    (async () => {
+      try {
+        const recipients = await Employee.find({ role: { $in: ['manager', 'admin', 'superadmin'] } }).select('_id');
+        for (const recipient of recipients) {
+          if (recipient._id.toString() === employee._id.toString()) continue;
+          await Notification.create({
+            recipient: recipient._id,
+            sender: employee._id,
+            title: 'Personnel Database Update',
+            message: `A new employee, ${employee.name}, has verified their account and joined the ${employee.location} team as ${employee.position}.`,
+            type: 'user_registered',
+            relatedId: employee._id
+          });
+        }
+      } catch (err) {
+        console.error('Error notifying team about verified signup:', err);
+      }
+    })();
+  }
+
+  // 6. Generate token for auto-login after verification
   const tokenForLogin = generateToken({
     id: employee._id.toString(),
     email: employee.email,
@@ -516,10 +586,40 @@ export async function verifyOTP(req: AuthRequest, res: Response): Promise<void> 
     employee.phoneNumberVerified = true;
   }
 
-  employee.otp = null;
-  employee.otpExpiry = null;
   employee.otpAttempts = 0;
   await employee.save();
+
+  // Check if approved
+  if (!employee.isApproved && employee.role !== 'superadmin') {
+    // Notify SuperAdmins about verified manager needing approval
+    (async () => {
+      try {
+        const administrators = await Employee.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id');
+        for (const admin of administrators) {
+          const notification = await Notification.create({
+            recipient: admin._id,
+            sender: employee._id,
+            title: 'New Manager Registry',
+            message: `${employee.name} has verified their identity via OTP and requires administrative approval for their ${employee.location} office role.`,
+            type: 'user_registered',
+            relatedId: employee._id
+          });
+          
+          // Emit real-time socket notification
+          emitNotification(admin._id.toString(), notification);
+        }
+      } catch (err) {
+        console.error('Error notifying admins about OTP-verified manager:', err);
+      }
+    })();
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      message: 'OTP verified. Your account is pending administrative approval.',
+      isApproved: false
+    });
+    return;
+  }
 
   // Generate token for auto-login
   const token = generateToken({

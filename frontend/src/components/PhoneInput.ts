@@ -12,7 +12,7 @@ export const PhoneInput = (props: {
     const label = document.createElement('label');
     label.htmlFor = props.id;
     label.className = "block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1";
-    label.innerText = props.label;
+    label.innerHTML = props.label + (props.required ? ' <span class="text-red-500">*</span>' : '');
 
     const inputWrapper = document.createElement('div');
     inputWrapper.className = "flex gap-2 relative";

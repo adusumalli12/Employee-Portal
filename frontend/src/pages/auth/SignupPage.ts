@@ -1,8 +1,9 @@
 import { Input } from '../../components/Input';
+import { AutocompleteInput } from '../../components/AutocompleteInput';
 import { PhoneInput } from '../../components/PhoneInput';
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { PAGES, TIMEOUTS, SESSION_KEYS } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -29,14 +30,53 @@ export const SignupPage = () => {
 
     const phoneInput = PhoneInput({ label: "Phone Number", id: "phoneNumber", name: "phoneNumber", placeholder: "", required: true, className: "col-span-1 md:col-span-2" });
 
-    const locInput = Input({ label: "City / Location", type: "text", id: "location", name: "location", placeholder: "", required: true });
-    const posInput = Input({ label: "Job Role", type: "text", id: "position", name: "position", placeholder: "", required: true });
+    const locInput = AutocompleteInput({ 
+        label: "City / Location", 
+        id: "location", 
+        name: "location", 
+        placeholder: "Search for your city...", 
+        required: true,
+        options: [
+            "Hyderabad, Telangana",
+            "Bengaluru, Karnataka",
+            "Pune, Maharashtra",
+            "Chennai, Tamil Nadu",
+            "Noida, Uttar Pradesh",
+            "Gurugram, Haryana",
+            "Mumbai, Maharashtra",
+            "Kolkata, West Bengal",
+            "Ahmedabad, Gujarat",
+            "Coimbatore, Tamil Nadu",
+            "Thiruvananthapuram, Kerala"
+        ]
+    });
+
+    const posInput = AutocompleteInput({ 
+        label: "Job Role", 
+        id: "position", 
+        name: "position", 
+        placeholder: "Select your designation...", 
+        required: true,
+        options: [
+            "MERN Stack Developer",
+            "Full Stack Developer",
+            "Frontend Engineer (React)",
+            "Backend Developer (Node.js)",
+            "Production Support Engineer",
+            "Quality Assurance (Testing)",
+            "Manual & Automation Tester",
+            "Product Manager",
+            "Project Manager",
+            "Team Lead / Manager",
+            "DevOps Engineer",
+            "UI/UX Designer",
+            "HR Manager",
+            "Sales Executive",
+            "Business Analyst"
+        ]
+    });
 
     const passwordInput = Input({ label: "Create Password", type: "password", id: "password", name: "password", placeholder: "", required: true, className: "col-span-1 md:col-span-2", icon: "👁️" });
-
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-    alertContainer.className = "col-span-1 md:col-span-2";
 
     const submitBtn = Button({ text: "Create Account", type: "submit", id: "submitBtn", className: "col-span-1 md:col-span-2 h-14 mt-4" });
 
@@ -44,7 +84,6 @@ export const SignupPage = () => {
     footer.className = "col-span-1 md:col-span-2 text-center mt-6 text-sm font-medium";
     footer.innerHTML = `<p class="text-slate-600">Already have an account? <a href="#/login" class="text-indigo-600 hover:text-indigo-800 transition-colors">Sign in</a></p>`;
 
-    form.appendChild(alertContainer);
     // Split name into two fields side-by-side
     const nameRow = document.createElement('div');
     nameRow.className = "col-span-1 md:col-span-2 grid grid-cols-2 gap-4";
@@ -55,51 +94,11 @@ export const SignupPage = () => {
     form.appendChild(emailInput.container);
     form.appendChild(phoneInput.container);
 
+    // Detail Row append
     const detailRow = document.createElement('div');
     detailRow.className = "col-span-1 md:col-span-2 grid grid-cols-2 gap-4";
     detailRow.appendChild(locInput.container);
     detailRow.appendChild(posInput.container);
-
-    // Add smart suggestions for Job Role
-    const rolesList = document.createElement('datalist');
-    rolesList.id = "role-suggestions";
-    const roles = [
-        "MERN Stack Developer",
-        "Full Stack Developer",
-        "Frontend Engineer (React)",
-        "Backend Developer (Node.js)",
-        "Production Support Engineer",
-        "Quality Assurance (Testing)",
-        "Manual & Automation Tester",
-        "Product Manager",
-        "Project Manager",
-        "Team Lead / Manager",
-        "DevOps Engineer",
-        "UI/UX Designer"
-    ];
-    rolesList.innerHTML = roles.map(r => `<option value="${r}">`).join('');
-    posInput.input.setAttribute('list', 'role-suggestions');
-    posInput.container.appendChild(rolesList);
-
-    // Add smart suggestions for Location (Indian IT Hubs)
-    const locList = document.createElement('datalist');
-    locList.id = "location-suggestions";
-    const cities = [
-        "Hyderabad, Telangana",
-        "Bengaluru, Karnataka",
-        "Pune, Maharashtra",
-        "Chennai, Tamil Nadu",
-        "Noida, Uttar Pradesh",
-        "Gurugram, Haryana",
-        "Mumbai, Maharashtra",
-        "Kolkata, West Bengal",
-        "Ahmedabad, Gujarat",
-        "Coimbatore, Tamil Nadu",
-        "Thiruvananthapuram, Kerala"
-    ];
-    locList.innerHTML = cities.map(c => `<option value="${c}">`).join('');
-    locInput.input.setAttribute('list', 'location-suggestions');
-    locInput.container.appendChild(locList);
 
     form.appendChild(detailRow);
     form.appendChild(passwordInput.container);
@@ -163,15 +162,13 @@ export const SignupPage = () => {
 
             const response = await APIClient.signup(apiData);
             if (response.success) {
-                // Auto-trigger Email verification method
-                await APIClient.selectVerificationMethod(rawData.email, 'email').catch(() => { });
-
-                AuthService.setSessionData(SESSION_KEYS.SIGNUP_DATA, apiData);
-                AuthService.setSessionData(SESSION_KEYS.VERIFICATION_EMAIL, rawData.email);
-                AuthService.setSessionData(SESSION_KEYS.VERIFICATION_CONTEXT, 'signup');
-
-                dom.showAlert('Account created! Please check your email for the verification code.', 'success');
-                setTimeout(() => window.location.hash = PAGES.VERIFY_OTP, TIMEOUTS.MEDIUM);
+                dom.showAlert('Welcome! Your account has been created. Please check your email and click the verification link to activate your access.', 'success');
+                
+                // Clear any leftover session data
+                AuthService.clearSessionData(SESSION_KEYS.SIGNUP_DATA);
+                AuthService.clearSessionData(SESSION_KEYS.VERIFICATION_EMAIL);
+                
+                setTimeout(() => window.location.hash = PAGES.LOGIN, TIMEOUTS.LONG);
             }
         } catch (error: any) {
             dom.showAlert(error.message || 'Signup failed', 'danger');

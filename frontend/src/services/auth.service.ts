@@ -1,5 +1,6 @@
 import APIClient from '../api/client';
 import { AuthUser } from '../types/auth';
+import { PAGES } from '../config/constants';
 
 export class AuthService {
     private static readonly TOKEN_KEY = 'auth_token';
@@ -36,6 +37,21 @@ export class AuthService {
     public static isManager(): boolean {
         const user = this.getUser();
         return user?.role === 'manager';
+    }
+
+    public static getDashboardPath(): string {
+        const user = this.getUser();
+        if (!user) return PAGES.LOGIN;
+        
+        if (user.role === 'admin' || user.role === 'superadmin') {
+            return PAGES.ADMIN_DASHBOARD;
+        }
+        
+        if (user.role === 'manager') {
+            return PAGES.MANAGER_DASHBOARD;
+        }
+        
+        return PAGES.DASHBOARD;
     }
 
     public static async logout(): Promise<void> {

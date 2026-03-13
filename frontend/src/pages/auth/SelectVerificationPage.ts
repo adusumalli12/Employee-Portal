@@ -1,6 +1,6 @@
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { SESSION_KEYS, TIMEOUTS, PAGES } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -14,10 +14,6 @@ export const SelectVerificationPage = () => {
 
     const container = document.createElement('div');
     container.className = "flex flex-col gap-6";
-
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-    container.appendChild(alertContainer);
 
     const handleSelect = async (method: 'email' | 'sms') => {
         try {
