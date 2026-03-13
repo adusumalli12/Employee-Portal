@@ -1,9 +1,13 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import dns from 'dns';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+
+// Force IPv4 for all network connections (Fixes ENETUNREACH on platforms like Render)
+dns.setDefaultResultOrder('ipv4first');
 import { createServer } from 'http';
 
 import { connectDatabase } from './config/database';
