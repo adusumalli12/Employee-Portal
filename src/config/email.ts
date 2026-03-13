@@ -37,9 +37,10 @@ export function getEmailTransporter(): Transporter {
       pool: true, // Use connection pooling
       maxConnections: 5,
       maxMessages: 100,
-      connectionTimeout: 5000, // 5 seconds
-      greetingTimeout: 5000,
-      socketTimeout: 30000, // 30 seconds
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 60000, // 60 seconds
+      family: 4, // Force IPv4
       auth: {
         user: env.EMAIL_USER,
         pass: env.EMAIL_PASSWORD,
