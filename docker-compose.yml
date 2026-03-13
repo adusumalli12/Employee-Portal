@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/employee-portal
     depends_on:
       - mongodb
 

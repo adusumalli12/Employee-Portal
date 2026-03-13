@@ -4,12 +4,18 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import { createServer } from 'http';
 
 import { connectDatabase } from './config/database';
 import env from './config/environment';
 import { RATE_LIMITS } from './utils/constants';
+import { initSocket } from './utils/socket';
 
 const app: Express = express();
+const server = createServer(app);
+
+// Initialize Socket.io
+const io = initSocket(server);
 
 // Trust proxy for rate limiting (important when behind Nginx/Heroku/Cloudflare)
 app.set('trust proxy', 1);
@@ -55,16 +61,18 @@ import performanceRoutes from './routes/performance.routes';
 import taskRoutes from './routes/task.routes';
 import leaveRoutes from './routes/leave.routes';
 import notificationRoutes from './routes/notification.routes';
+import adminRoutes from './routes/admin.routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
-app.use('/auth', authRoutes);
-app.use('/employees', employeeRoutes);
-app.use('/twilio', twilioRoutes);
-app.use('/attendance', attendanceRoutes);
-app.use('/performance', performanceRoutes);
-app.use('/tasks', taskRoutes);
-app.use('/leaves', leaveRoutes);
-app.use('/notifications', notificationRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/twilio', twilioRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/performance', performanceRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/leaves', leaveRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // =======================
 // Basic Health Check Routes
@@ -85,8 +93,7 @@ app.get('/health', (_req: Request, res: Response) => {
 app.use((req: Request, res: Response, next: NextFunction) => {
   // Only handle GET requests for non-API paths
   if (req.method === 'GET') {
-    const apiPrefixes = ['/auth', '/employees', '/twilio', '/attendance', '/performance', '/tasks', '/leaves', '/notifications', '/health', '/assets'];
-    const isApiRequest = apiPrefixes.some(prefix => req.path.startsWith(prefix));
+    const isApiRequest = req.path.startsWith('/api') || req.path.startsWith('/health') || req.path.startsWith('/assets');
 
     if (!isApiRequest) {
       return res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
@@ -115,9 +122,20 @@ async function startServer(): Promise<void> {
 
     // Start listening
     const PORT = env.PORT || 5000;
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`📍 Environment: ${env.NODE_ENV}`);
+      console.log(`🔌 WebSockets initialized`);
+    });
+
+    server.on('error', (e: any) => {
+      if (e.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use.`);
+        console.error(`💡 Suggestion: Run "npx kill-port ${PORT}" or close other terminal windows.`);
+        process.exit(1);
+      } else {
+        console.error('❌ Server error:', e);
+      }
     });
 
     // Graceful shutdown

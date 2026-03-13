@@ -9,8 +9,10 @@ import { VerifyOTPPage } from './pages/auth/VerifyOTPPage';
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage';
 import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
 import { ManagerDashboardPage } from './pages/manager/ManagerDashboardPage';
+import { AdminDashboardView } from './pages/admin/AdminDashboardView';
 import { AdminApprovalPage } from './pages/admin/AdminApprovalPage';
-import { AuthService } from './services/AuthService';
+import { AuthService } from './services/auth.service';
+import SocketService from './services/socket.service';
 import { PAGES } from './config/constants';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -21,6 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     router.addRoute(PAGES.SIGNUP, SignupPage);
     router.addRoute(PAGES.DASHBOARD, Dashboard);
     router.addRoute(PAGES.MANAGER_DASHBOARD, ManagerDashboardPage);
+    router.addRoute(PAGES.ADMIN_DASHBOARD, AdminDashboardView);
     router.addRoute(PAGES.ADMIN_APPROVALS, AdminApprovalPage);
     router.addRoute(PAGES.FORGOT_PASSWORD, ForgotPasswordPage);
     router.addRoute(PAGES.RESET_PASSWORD, ResetPasswordPage);
@@ -36,28 +39,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         const needsAuth = AuthService.getRequiredAuth(hash);
 
         if (needsAuth && !isAuth) {
+            SocketService.disconnect();
             window.location.hash = PAGES.LOGIN;
             return;
         }
 
         if (isAuth) {
+            SocketService.connect();
             // Role Based Redirection
             if (hash === PAGES.LOGIN || hash === PAGES.SIGNUP) {
-                const target = AuthService.isManager() ? PAGES.MANAGER_DASHBOARD : PAGES.DASHBOARD;
+                let target = PAGES.DASHBOARD;
+                if (AuthService.isAdmin()) target = PAGES.ADMIN_DASHBOARD;
+                else if (AuthService.isManager()) target = PAGES.MANAGER_DASHBOARD;
+                
                 window.location.hash = target;
                 return;
             }
 
             // Role Based Restrictions
+            const dashboardPath = AuthService.getDashboardPath();
+            
             if (hash === PAGES.MANAGER_DASHBOARD && !AuthService.isManager() && !AuthService.isAdmin()) {
                 window.location.hash = PAGES.DASHBOARD;
             }
-            if (hash === PAGES.DASHBOARD && AuthService.isManager()) {
-                window.location.hash = PAGES.MANAGER_DASHBOARD;
+            if (hash === PAGES.DASHBOARD && dashboardPath !== PAGES.DASHBOARD) {
+                window.location.hash = dashboardPath;
             }
             if (hash === PAGES.ADMIN_APPROVALS && !AuthService.isAdmin()) {
                 window.location.hash = PAGES.DASHBOARD;
             }
+            if (hash === PAGES.ADMIN_DASHBOARD && !AuthService.isAdmin()) {
+                window.location.hash = PAGES.DASHBOARD;
+            }
+        } else {
+            SocketService.disconnect();
         }
     };
 

@@ -341,6 +341,14 @@ class APIClient {
     return this.patch(`/leaves/${leaveId}/status`, { status });
   }
 
+  async cancelLeave(leaveId: string): Promise<ApiResponse<any>> {
+    return this.delete(`/leaves/${leaveId}/cancel`);
+  }
+
+  async updateLeave(leaveId: string, data: { type?: string; startDate?: string; endDate?: string; reason?: string }): Promise<ApiResponse<any>> {
+    return this.patch(`/leaves/${leaveId}/update`, data);
+  }
+
   // ===========================
   // Notification Endpoints
   // ===========================
@@ -356,6 +364,30 @@ class APIClient {
   async markAllNotificationsRead(): Promise<ApiResponse<any>> {
     return this.put('/notifications/read-all');
   }
+
+  // ===========================
+  // Admin Endpoints
+  // ===========================
+
+  async getAdminStats(): Promise<ApiResponse<any>> {
+    return this.get('/admin/stats');
+  }
+
+  async getPendingAdminManagers(): Promise<ApiResponse<any>> {
+    return this.get('/admin/pending-managers');
+  }
+
+  async approveAdminManager(managerId: string, approve: boolean = true): Promise<ApiResponse<any>> {
+    return this.post(`/admin/approve-manager/${managerId}`, { approve });
+  }
+
+  async getAllGlobalEmployees(): Promise<ApiResponse<any>> {
+    return this.get('/admin/employees');
+  }
+
+  async getGlobalAdminTasks(): Promise<ApiResponse<any>> {
+    return this.get('/admin/tasks');
+  }
 }
 
-export default new APIClient();
+export default new APIClient('/api');

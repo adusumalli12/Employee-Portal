@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
-import { Employee } from '../models/Employee';
+import { Employee } from '../models/employee.model';
 import { HTTP_STATUS, ResponseMessages } from '../utils/constants';
 
 /**

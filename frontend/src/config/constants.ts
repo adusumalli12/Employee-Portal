@@ -18,6 +18,7 @@ export const PAGES = {
   SIGNUP: '#/signup',
   DASHBOARD: '#/dashboard',
   MANAGER_DASHBOARD: '#/manager/dashboard',
+  ADMIN_DASHBOARD: '#/admin/dashboard',
   ADMIN_APPROVALS: '#/admin/approvals',
   VERIFY_OTP: '#/verify-otp',
   VERIFY_EMAIL: '#/verify-email',

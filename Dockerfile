@@ -1,48 +1,32 @@
-# --- Stage 1: Builder ---
+# STAGE 1: Build & Compile
 FROM node:20-alpine AS builder
 
-# Install build tools for native dependencies like bcrypt
-RUN apk add --no-cache python3 make g++ 
-
 WORKDIR /app
 
-# Copy dependency manifests
+# Install all dependencies (bcryptjs doesn't need C++ tools)
 COPY package*.json ./
-
-# Install all dependencies (including devDependencies for build)
 RUN npm install
 
-# Copy source code
+# Copy source and build (Backend + Frontend)
 COPY . .
-
-# Build the project (Backend and Frontend)
-# This generates ./dist and ./frontend/dist
 RUN npm run build
 
-# --- Stage 2: Runner ---
+# STAGE 2: Production Runner
 FROM node:20-alpine AS runner
 
-# Install runtime dependencies for native modules
-RUN apk add --no-cache python3 make g++ 
-
 WORKDIR /app
-
-# Set production environment
 ENV NODE_ENV=production
-ENV PORT=3000
 
-# Copy dependency manifests
+# Copy only production dependencies
 COPY package*.json ./
-
-# Install only production dependencies
 RUN npm install --omit=dev
 
-# Copy built assets from builder stage
+# Copy only the compiled artifacts
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
-# Expose application port
-EXPOSE 3000
+# Expose the API/Frontend port
+EXPOSE 5000
 
-# Entry point
-CMD ["npm", "run", "start"]
+# Start the server
+CMD ["node", "dist/index.js"]

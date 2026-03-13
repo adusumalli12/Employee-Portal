@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
-import { Attendance } from '../models/Attendance';
-import { Task } from '../models/Task';
+import { Attendance } from '../models/attendance.model';
+import { Task } from '../models/task.model';
 import { HTTP_STATUS } from '../utils/constants';
 import { asyncHandler } from '../middleware/errorHandler';
 
@@ -40,7 +40,10 @@ export const clockIn = asyncHandler(async (req: AuthRequest, res: Response): Pro
         }
     }
 
-    // 2. Enforce ONCE PER DAY limit
+    // 2. Removed ONCE PER DAY limit to allow multiple sessions (e.g. lunch breaks, part-time shifts)
+    // The status check above (Step 1) already ensures they don't have TWO active sessions.
+    
+    /* 
     const existingSessionToday = await Attendance.findOne({
         employee: req.user.id,
         date: today
@@ -53,6 +56,7 @@ export const clockIn = asyncHandler(async (req: AuthRequest, res: Response): Pro
         });
         return;
     }
+    */
 
     // 3. Create new session
     const attendance = new Attendance({
@@ -175,19 +179,23 @@ export const getTodayStatus = asyncHandler(async (req: AuthRequest, res: Respons
         }
     );
 
-    // 2. Fetch today's session or the current active one
-    const attendance = await Attendance.findOne({
+    // 2. Fetch all sessions for today to sum the total work duraton
+    const sessions = await Attendance.find({
         employee: req.user.id,
         date: today
     } as any).sort({ createdAt: -1 });
 
-    // 3. Determine if currently clocked in
-    const isClockedIn = attendance && (attendance.status === 'working' || attendance.status === 'on-break');
+    // The current active session (if any) is the latest one
+    const latestSession = sessions[0];
+    const isClockedIn = latestSession && (latestSession.status === 'working' || latestSession.status === 'on-break');
+
+    // Sum up total seconds from all COMPLETED and ACTIVE sessions today
+    const totalSecondsToday = sessions.reduce((acc, s) => acc + (s.totalSeconds || 0), 0);
 
     res.status(HTTP_STATUS.OK).json({
         success: true,
-        attendance,
-        totalSecondsToday: attendance?.totalSeconds || 0,
+        attendance: latestSession,
+        totalSecondsToday,
         isClockedIn: !!isClockedIn
     });
 });

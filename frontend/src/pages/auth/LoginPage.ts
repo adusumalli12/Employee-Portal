@@ -1,7 +1,7 @@
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { PAGES, TIMEOUTS } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -36,9 +36,6 @@ export const LoginPage = () => {
         icon: "👁️"
     });
 
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-
     const submitBtn = Button({
         text: "Log in",
         type: "submit",
@@ -53,7 +50,6 @@ export const LoginPage = () => {
         <p><a href="#/forgot-password" class="text-indigo-600 hover:text-indigo-800 transition-colors">Forgot your password?</a></p>
     `;
 
-    form.appendChild(alertContainer);
     form.appendChild(emailInput.container);
     form.appendChild(passwordInput.container);
     form.appendChild(submitBtn);
@@ -89,7 +85,7 @@ export const LoginPage = () => {
 
                 dom.showAlert('Welcome back!', 'success');
 
-                const targetPath = user?.role === 'manager' ? PAGES.MANAGER_DASHBOARD : PAGES.DASHBOARD;
+                const targetPath = AuthService.getDashboardPath();
                 setTimeout(() => window.location.hash = targetPath, TIMEOUTS.MEDIUM);
             }
         } catch (error: any) {

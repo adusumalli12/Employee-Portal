@@ -4,7 +4,93 @@
 
 @layer base {
     body {
-        font-family: 'Inter', sans-serif;
-        @apply bg-slate-50 text-slate-800;
+        font-family: 'Outfit', 'Inter', sans-serif;
+        @apply bg-slate-50 text-slate-800 antialiased;
+    }
+}
+
+@layer utilities {
+    .animate-in {
+        animation-duration: 600ms;
+        animation-fill-mode: forwards;
+        animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+    }
+
+    .fade-in { animation-name: fadeIn; }
+    .slide-in-from-top-8 { animation-name: slideInFromTop8; }
+    .slide-in-from-bottom-4 { animation-name: slideInFromBottom4; }
+    .slide-in-from-right-8 { animation-name: slideInFromRight8; }
+    
+    .animate-draw-path {
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: draw 2s ease-out forwards;
+    }
+
+    .glass-card {
+        @apply bg-white/70 backdrop-blur-xl border border-white/40 shadow-2xl;
+    }
+
+    .animate-pulse-slow {
+        animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    .animate-out {
+        animation-duration: 500ms;
+        animation-fill-mode: forwards;
+        animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .fade-out {
+        animation-name: fadeOut;
+    }
+
+    .slide-out-to-top-8 {
+        animation-name: slideOutToTop8;
+    }
+
+    .slide-out-to-right-8 {
+        animation-name: slideOutToRight8;
+    }
+
+    .zoom-out-95 {
+        animation-name: zoomOut95;
+    }
+
+    @keyframes draw {
+        to { stroke-dashoffset: 0; }
+    }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+    @keyframes slideInFromTop8 {
+        from { transform: translateY(-40px) scale(0.95); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    @keyframes slideInFromBottom4 {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes slideOutToTop8 {
+        from { transform: translateY(0) scale(1); opacity: 1; }
+        to { transform: translateY(-40px) scale(0.95); opacity: 0; }
+    }
+
+    @keyframes slideInFromRight8 {
+        from { transform: translateX(100px) scale(0.9); opacity: 0; }
+        to { transform: translateX(0) scale(1); opacity: 1; }
+    }
+
+    @keyframes slideOutToRight8 {
+        from { transform: translateX(0) scale(1); opacity: 1; }
+        to { transform: translateX(100px) scale(0.9); opacity: 0; }
+    }
+
+    @keyframes zoomOut95 {
+        from { transform: scale(1); }
+        to { transform: scale(0.95); }
     }
 }

@@ -10,6 +10,8 @@ router.use(authenticateToken);
 // Employee routes
 router.post('/apply', leaveController.applyLeave);
 router.get('/my-leaves', leaveController.getMyLeaves);
+router.delete('/:leaveId/cancel', leaveController.cancelLeave);
+router.patch('/:leaveId/update', leaveController.updateLeave);
 
 // Manager routes
 router.get('/team-leaves', authorize(['manager', 'admin', 'superadmin']), leaveController.getTeamLeaves);

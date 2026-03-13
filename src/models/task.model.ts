@@ -32,4 +32,7 @@ const TaskSchema: Schema = new Schema({
     completedAt: { type: Date }
 }, { timestamps: true });
 
+// TTL Index: Delete completed tasks after 72 hours (259200 seconds)
+TaskSchema.index({ completedAt: 1 }, { expireAfterSeconds: 259200 });
+
 export const Task = mongoose.model<ITask>('Task', TaskSchema);

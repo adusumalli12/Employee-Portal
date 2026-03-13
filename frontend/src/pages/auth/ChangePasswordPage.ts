@@ -1,7 +1,7 @@
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { TIMEOUTS, PAGES } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -38,9 +38,6 @@ export const ChangePasswordPage = () => {
         icon: "👁️"
     });
 
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-
     const submitBtn = Button({
         text: "Save New Password →",
         type: "submit",
@@ -52,7 +49,6 @@ export const ChangePasswordPage = () => {
     cancelLink.className = "text-center mt-6 text-sm font-medium";
     cancelLink.innerHTML = `<a href="#/dashboard" class="text-slate-500 hover:text-indigo-600 transition-colors">Cancel and return to Dashboard</a>`;
 
-    form.appendChild(alertContainer);
     form.appendChild(otpInput.container);
     form.appendChild(newPasswordInput.container);
     form.appendChild(submitBtn);

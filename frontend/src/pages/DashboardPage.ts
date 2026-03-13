@@ -1,5 +1,6 @@
-import { AuthService } from '../services/AuthService';
-import { AttendanceService } from '../services/AttendanceService';
+import { AuthService } from '../services/auth.service';
+import { AttendanceService } from '../services/attendance.service';
+import SocketService from '../services/socket.service';
 import { Button } from '../components/Button';
 import APIClient from '../api/client';
 import * as dom from '../utils/dom';
@@ -11,10 +12,20 @@ export const Dashboard = () => {
     let activeLeaveTab: 'history' | 'calendar' = 'history';
     let myLeaves: any[] = [];
     let activeTasks: any[] = [];
+    let performance: any = null;
     let timerInterval: any = null;
     let stats: any = null;
     let notifications: any[] = [];
     let isNotificationOpen = false;
+
+    // --- REAL-TIME NOTIFICATIONS ---
+    const unsubscribe = SocketService.onNotification((notification) => {
+        notifications = [notification, ...notifications];
+        refreshDashboard();
+        
+        // Push notification alert (Optional)
+        dom.showAlert(`New Notification: ${notification.title}`, "info");
+    });
 
     const wrapper = document.createElement('div');
     wrapper.className = "min-h-screen bg-slate-50 flex flex-col";
@@ -111,7 +122,7 @@ export const Dashboard = () => {
         const m = showModal("New Working Task", `
             <form id="quick-task-form" class="space-y-6">
                 <div>
-                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Task Title</label>
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Task Title <span class="text-red-500">*</span></label>
                     <input name="title" required placeholder="What needs to be done?" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
                 </div>
                 <div>
@@ -120,7 +131,7 @@ export const Dashboard = () => {
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                      <div>
-                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Priority</label>
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Priority <span class="text-red-500">*</span></label>
                         <select name="priority" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
                             <option value="low">Low</option>
                             <option value="medium" selected>Medium</option>
@@ -240,7 +251,7 @@ export const Dashboard = () => {
                     ? (st.isOnBreak
                         ? st.totalSecondsToday
                         : st.totalSecondsToday + (st.clockInTime ? Math.floor((Date.now() - st.clockInTime) / 1000) : 0))
-                    : st.totalSecondsToday;
+                    : 0; // Reset to 00:00:00 when not working as requested
                 const h = Math.floor(displaySeconds / 3600);
                 const m = Math.floor((displaySeconds % 3600) / 60);
                 const s = displaySeconds % 60;
@@ -469,18 +480,49 @@ export const Dashboard = () => {
         const container = document.createElement('div');
         container.className = "flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500";
 
-        const chartHeader = (title: string) => `
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-sm font-black text-slate-800 tracking-tight">${title}</h3>
-                <div class="flex items-center gap-1.5 text-slate-400">
-                    <button class="hover:text-indigo-600 transition-colors p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg></button>
-                    <button class="hover:text-indigo-600 transition-colors p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4"></path></svg></button>
-                    <button class="hover:text-indigo-600 transition-colors p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
-                    <button class="hover:text-indigo-600 transition-colors p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
-                    <button class="hover:text-indigo-600 transition-colors p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+        const chartHeader = (title: string, chartId: string) => `
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <h3 class="text-sm font-black text-slate-800 tracking-tight uppercase tracking-widest">${title}</h3>
+                <div class="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 shadow-sm">
+                    <button data-action="sync" data-chart="${chartId}" title="Sync Real-time" class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg></button>
+                    <button data-action="minimize" data-chart="${chartId}" title="Minimize" class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4"></path></svg></button>
+                    <button data-action="search" data-chart="${chartId}" title="Deep Search" class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                    <button data-action="home" data-chart="${chartId}" title="Home View" class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
+                    <button data-action="menu" data-chart="${chartId}" title="More Options" class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:text-indigo-600 text-slate-400 transition-all hover:scale-110 active:scale-95"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
                 </div>
             </div>
         `;
+
+        const graphs = performance?.graphs || { 
+            productivityFlow: [
+                { time: '09:00', input: 0, output: 0 },
+                { time: '11:00', input: 0, output: 0 },
+                { time: '13:00', input: 0, output: 0 },
+                { time: '15:00', input: 0, output: 0 },
+                { time: '17:00', input: 0, output: 0 }
+            ],
+            efficiencyMetrics: [
+                { time: '09:00', efficiency: 0, errors: 0 },
+                { time: '11:00', efficiency: 0, errors: 0 },
+                { time: '13:00', efficiency: 0, errors: 0 },
+                { time: '15:00', efficiency: 0, errors: 0 },
+                { time: '17:00', efficiency: 0, errors: 0 }
+            ]
+        };
+
+        const generatePath = (data: number[], max: number) => {
+            if (data.length === 0) return "";
+            const points = data.map((val, i) => `${i * 25},${100 - (max > 0 ? (val / max * 100) : 0)}`);
+            return `M ${points.join(" L ")}`;
+        };
+
+        const prodMax = Math.max(...graphs.productivityFlow.flatMap((d: any) => [d.input, d.output]), 1);
+        const inputPath = generatePath(graphs.productivityFlow.map((d: any) => d.input), prodMax);
+        const outputPath = generatePath(graphs.productivityFlow.map((d: any) => d.output), prodMax);
+
+        const efficiencyPath = generatePath(graphs.efficiencyMetrics.map((d: any) => d.efficiency), 100);
+        const errorMax = Math.max(...graphs.efficiencyMetrics.map((d: any) => d.errors), 1);
+        const errorPath = generatePath(graphs.efficiencyMetrics.map((d: any) => d.errors), errorMax);
 
         container.innerHTML = `
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
@@ -494,16 +536,14 @@ export const Dashboard = () => {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <!-- Success Rate Chart -->
                 <div class="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
-                    ${chartHeader('Task Efficiency (Success Vs Failure)')}
+                    ${chartHeader('Task Efficiency (Success Vs Failure)', 'efficiency')}
                     <div class="h-64 relative w-full pt-4">
                         <svg class="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <path d="M 0,90 Q 25,20 50,10 T 100,20" fill="none" stroke="#10b981" stroke-width="2" class="animate-draw-path" />
-                            <path d="M 0,95 Q 25,80 50,85 T 100,75" fill="none" stroke="#ef4444" stroke-width="2" class="animate-draw-path" />
-                            <circle cx="50" cy="10" r="1.5" fill="#10b981" class="animate-pulse" />
-                            <circle cx="95" cy="75" r="1.5" fill="#ef4444" />
+                            <path d="${efficiencyPath}" fill="none" stroke="#10b981" stroke-width="2" class="animate-draw-path" />
+                            <path d="${errorPath}" fill="none" stroke="#ef4444" stroke-width="2" class="animate-draw-path" />
                         </svg>
                         <div class="absolute bottom-0 left-0 w-full flex justify-between text-[8px] font-bold text-slate-300 uppercase tracking-tighter pt-4">
-                           ${['09:00', '11:00', '13:00', '15:00', '17:00'].map(t => `<span>${t}</span>`).join('')}
+                           ${graphs.efficiencyMetrics.map((t: any) => `<span>${t.time}</span>`).join('')}
                         </div>
                     </div>
                     <div class="flex items-center gap-6 mt-8 justify-center">
@@ -520,15 +560,14 @@ export const Dashboard = () => {
 
                 <!-- Productivity Over Time -->
                 <div class="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
-                    ${chartHeader('Productivity Flow over Time')}
+                    ${chartHeader('Productivity Flow over Time', 'productivity')}
                     <div class="h-64 relative w-full pt-4">
                          <svg class="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <path d="M 0,85 L 20,70 L 40,80 L 60,30 L 80,45 L 100,10" fill="none" stroke="#6366f1" stroke-width="2" class="animate-draw-path" />
-                            <path d="M 0,95 L 20,90 L 40,85 L 60,70 L 80,75 L 100,60" fill="none" stroke="#f59e0b" stroke-width="2" class="animate-draw-path" />
-                            <circle cx="100" cy="10" r="1.5" fill="#6366f1" />
+                            <path d="${outputPath}" fill="none" stroke="#6366f1" stroke-width="2" class="animate-draw-path" />
+                            <path d="${inputPath}" fill="none" stroke="#f59e0b" stroke-width="2" class="animate-draw-path" />
                         </svg>
                         <div class="absolute bottom-0 left-0 w-full flex justify-between text-[8px] font-bold text-slate-300 uppercase tracking-tighter pt-4">
-                           ${['09:00', '11:00', '13:00', '15:00', '17:00'].map(t => `<span>${t}</span>`).join('')}
+                           ${graphs.productivityFlow.map((t: any) => `<span>${t.time}</span>`).join('')}
                         </div>
                     </div>
                     <div class="flex items-center gap-6 mt-8 justify-center">
@@ -608,6 +647,32 @@ export const Dashboard = () => {
                 }
             </style>
         `;
+
+        container.querySelectorAll('button[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = (e.currentTarget as HTMLElement).dataset.action;
+                
+                if (action === 'sync') {
+                    dom.showAlert('Initiating real-time data synchronization...', 'info');
+                    syncData();
+                } else if (action === 'home') {
+                    currentTab = 'overview';
+                    refreshDashboard();
+                } else if (action === 'search') {
+                    currentTab = 'reports';
+                    refreshDashboard();
+                } else if (action === 'minimize') {
+                   const card = (e.currentTarget as HTMLElement).closest('.bg-white');
+                   const content = card?.querySelector('.h-64, .relative');
+                   if (content) {
+                       content.classList.toggle('hidden');
+                       dom.showAlert(content.classList.contains('hidden') ? 'Chart minimized' : 'Chart expanded', 'info');
+                   }
+                } else if (action === 'menu') {
+                    dom.showAlert('Extended analytics menu and export options coming soon.', 'info');
+                }
+            });
+        });
 
         container.querySelectorAll('[data-go-tasks]').forEach(el => {
             el.addEventListener('click', () => {
@@ -1093,9 +1158,23 @@ export const Dashboard = () => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <span class="px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : (leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700')}">
-                                            ${leave.status}
-                                        </span>
+                                        <div class="flex items-center gap-3">
+                                            <div class="flex flex-col items-end gap-2">
+                                                <span class="px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : (leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700')}">
+                                                    ${leave.status}
+                                                </span>
+                                                ${leave.status === 'pending' ? `
+                                                    <div class="flex gap-2">
+                                                        <button class="edit-leave-btn p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm" data-id="${leave._id}" title="Edit Leave">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                                        </button>
+                                                        <button class="cancel-leave-btn p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-sm" data-id="${leave._id}" title="Cancel Leave Request">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                        </button>
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        </div>
                                     </div>
                                 `).join('')}
                             </div>
@@ -1181,7 +1260,7 @@ export const Dashboard = () => {
                 <form id="leave-form" class="space-y-6">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Leave Type</label>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Leave Type <span class="text-red-500">*</span></label>
                             <select name="type" required class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
                                 <option value="vacation">Vacation</option>
                                 <option value="sick">Sick Leave</option>
@@ -1189,17 +1268,17 @@ export const Dashboard = () => {
                             </select>
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Reason</label>
-                            <input name="reason" required placeholder="Reason for leave..." class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
+                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Reason <span class="text-red-500">*</span></label>
+                            <input name="reason" required autocomplete="off" placeholder="Reason for leave..." class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Start Date</label>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Start Date <span class="text-red-500">*</span></label>
                             <input type="date" name="startDate" required class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
                         </div>
                         <div>
-                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">End Date</label>
+                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">End Date <span class="text-red-500">*</span></label>
                             <input type="date" name="endDate" required class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
                         </div>
                     </div>
@@ -1240,6 +1319,93 @@ export const Dashboard = () => {
             });
         });
 
+        // Add Event Listeners for Edit/Cancel
+        container.querySelectorAll('.cancel-leave-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const leaveId = (btn as HTMLElement).getAttribute('data-id');
+                if (!leaveId) return;
+
+                if (!confirm('Are you sure you want to cancel this leave request?')) return;
+
+                try {
+                    // Optimistic update
+                    myLeaves = myLeaves.filter(l => l._id !== leaveId);
+                    refreshDashboard();
+                    
+                    const res = await APIClient.cancelLeave(leaveId);
+                    if (res.success) {
+                        dom.showAlert("Leave request cancelled successfully.", "success");
+                    } else {
+                        dom.showAlert(res.message || "Failed to cancel leave.", "danger");
+                        await syncData();
+                    }
+                } catch (err: any) {
+                    dom.showAlert(err.message || "Error cancelling leave.", "danger");
+                    await syncData();
+                }
+            });
+        });
+
+        container.querySelectorAll('.edit-leave-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const leaveId = (btn as HTMLElement).getAttribute('data-id');
+                const leave = myLeaves.find(l => l._id === leaveId);
+                if (!leave) return;
+
+                const m = showModal("Update Leave Details", `
+                    <form id="edit-leave-form" class="space-y-6">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Leave Type <span class="text-red-500">*</span></label>
+                                <select name="type" required class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
+                                    <option value="vacation" ${leave.type === 'vacation' ? 'selected' : ''}>Vacation</option>
+                                    <option value="sick" ${leave.type === 'sick' ? 'selected' : ''}>Sick Leave</option>
+                                    <option value="personal" ${leave.type === 'personal' ? 'selected' : ''}>Personal</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Reason <span class="text-red-500">*</span></label>
+                                <input name="reason" required autocomplete="off" value="${leave.reason}" placeholder="Reason for leave..." class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Start Date <span class="text-red-500">*</span></label>
+                                <input type="date" name="startDate" required value="${new Date(leave.startDate).toISOString().split('T')[0]}" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">End Date <span class="text-red-500">*</span></label>
+                                <input type="date" name="endDate" required value="${new Date(leave.endDate).toISOString().split('T')[0]}" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-4 text-slate-900 font-bold focus:border-indigo-500 transition-all outline-none">
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-5 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all">Apply Modifications</button>
+                    </form>
+                `);
+
+                m.querySelector('#edit-leave-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.target as HTMLFormElement);
+                    const data = Object.fromEntries(formData.entries()) as any;
+
+                    try {
+                        if (!leaveId) return;
+                        const res = await APIClient.updateLeave(leaveId, data);
+                        if (res.success) {
+                            m.remove();
+                            dom.showAlert("Leave modifications synchronized.", "success");
+                            await syncData();
+                        } else {
+                            dom.showAlert(res.message || "Update failed.", "danger");
+                        }
+                    } catch (err: any) {
+                        dom.showAlert(err.message || "Error updating leave.", "danger");
+                    }
+                });
+            });
+        });
+
         return container;
     };
 
@@ -1259,12 +1425,26 @@ export const Dashboard = () => {
             });
         }
         navRight.querySelectorAll('[data-nid]').forEach(item => {
-            item.addEventListener('click', async () => {
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
                 const nid = item.getAttribute('data-nid');
-                if (nid) {
+                const n = notifications.find(notif => notif._id === nid);
+
+                if (nid && n) {
                     await APIClient.markNotificationRead(nid);
-                    notifications = notifications.map(n => n._id === nid ? { ...n, isRead: true } : n);
-                    refreshDashboard();
+                    // Deletion Logic: Filter out immediately for real-time removal
+                    notifications = notifications.filter(notif => notif._id !== nid);
+                    
+                    // Redirection Logic
+                    if (['leave_requested', 'leave_approved', 'leave_rejected'].includes(n.type)) {
+                        currentTab = 'leaves';
+                        isNotificationOpen = false;
+                        refreshDashboard();
+                    } else {
+                        // Close dropdown if empty
+                        isNotificationOpen = notifications.length > 0;
+                        refreshDashboard();
+                    }
                 }
             });
         });
@@ -1295,15 +1475,17 @@ export const Dashboard = () => {
     const syncData = async () => {
         try {
             attendance = await AttendanceService.refreshState();
-            const [statsRes, leaveRes, taskRes, notifRes] = await Promise.all([
+            const [statsRes, leaveRes, taskRes, notifRes, perfRes] = await Promise.all([
                 AttendanceService.getStats(),
                 APIClient.getMyLeaves(),
                 APIClient.getMyTasks(),
-                APIClient.getNotifications()
+                APIClient.getNotifications(),
+                APIClient.getMyPerformance()
             ]);
             if (statsRes?.success) stats = statsRes;
             if (leaveRes.success) myLeaves = leaveRes.data as any[];
             if (taskRes.success) activeTasks = taskRes.data as any[];
+            if (perfRes.success) performance = perfRes;
             if (notifRes.success) {
                 const newUnread = (notifRes.data as any[]).filter(n => !n.isRead && !notifications.some(on => on._id === n._id));
                 if (newUnread.length > 0) dom.showAlert(`Alert: ${newUnread[0].title}`, 'info');
@@ -1335,7 +1517,7 @@ export const Dashboard = () => {
             ? (st.isOnBreak
                 ? st.totalSecondsToday
                 : st.totalSecondsToday + (st.clockInTime ? Math.floor((Date.now() - st.clockInTime) / 1000) : 0))
-            : st.totalSecondsToday;
+            : 0; // Reset to 00:00:00 when not working as requested
 
         const h = Math.floor(displaySeconds / 3600);
         const m = Math.floor((displaySeconds % 3600) / 60);

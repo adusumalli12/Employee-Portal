@@ -3,9 +3,8 @@
  * Compiles TypeScript page files and bundles them with HTML
  */
 
-const fs = require('fs-extra');
-const path = require('path');
-const { execSync } = require('child_process');
+import fs from 'fs-extra';
+import path from 'path';
 
 const FRONTEND_SRC = path.join(__dirname, '../frontend/src');
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
@@ -47,7 +46,7 @@ async function buildFrontend() {
     // Step 4: Styles are handled by the separate build:css command
     console.log('✅ Frontend build completed successfully!');
     console.log(`Output directory: ${FRONTEND_DIST}/`);
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Frontend build failed:', error.message);
     process.exit(1);
   }

@@ -36,6 +36,9 @@ interface Environment {
   RATE_LIMIT_MAX_GLOBAL: number;
   RATE_LIMIT_MAX_AUTH: number;
   RATE_LIMIT_MAX_OTP: number;
+
+  // Admin
+  INITIAL_ADMIN_EMAIL: string;
 }
 
 function getEnvVariable(key: keyof Environment, defaultValue?: string | number): string | number {
@@ -81,6 +84,9 @@ const env: Environment = {
   RATE_LIMIT_MAX_GLOBAL: parseInt(getEnvVariable('RATE_LIMIT_MAX_GLOBAL' as any, 1000) as string, 10),
   RATE_LIMIT_MAX_AUTH: parseInt(getEnvVariable('RATE_LIMIT_MAX_AUTH' as any, 100) as string, 10),
   RATE_LIMIT_MAX_OTP: parseInt(getEnvVariable('RATE_LIMIT_MAX_OTP' as any, 100) as string, 10),
+
+  // Admin
+  INITIAL_ADMIN_EMAIL: getEnvVariable('INITIAL_ADMIN_EMAIL' as any, '') as string,
 };
 
 console.log('------------------------------------------------');

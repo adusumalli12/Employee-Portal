@@ -1,7 +1,7 @@
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { AuthLayout } from '../../layouts/AuthLayout';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/auth.service';
 import APIClient from '../../api/client';
 import { TIMEOUTS, PAGES, SESSION_KEYS } from '../../config/constants';
 import * as dom from '../../utils/dom';
@@ -56,17 +56,12 @@ export const ResetPasswordPage = () => {
         icon: "👁️"
     });
 
-    const alertContainer = document.createElement('div');
-    alertContainer.id = "alertMessage";
-
     const submitBtn = Button({
         text: "Reset Password →",
         type: "submit",
         id: "submitBtn",
         className: "h-14 mt-4"
     });
-
-    form.appendChild(alertContainer);
 
     // Only show OTP input if we don't have a token in the URL
     if (!token) {
