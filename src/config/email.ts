@@ -1,3 +1,7 @@
+import dns from 'dns';
+// Force IPv4 for all network connections (Fixes ENETUNREACH on platforms like Render)
+dns.setDefaultResultOrder('ipv4first');
+
 import nodemailer, { Transporter } from 'nodemailer';
 import env from './environment';
 
@@ -31,15 +35,13 @@ let transporter: Transporter | null = null;
 export function getEmailTransporter(): Transporter {
   if (!transporter) {
     const emailConfig: any = {
-      host: env.EMAIL_HOST,
-      port: env.EMAIL_PORT,
-      secure: env.EMAIL_PORT === 465,
-      pool: true, // Use connection pooling
+      service: 'gmail',
+      pool: true,
       maxConnections: 5,
       maxMessages: 100,
-      connectionTimeout: 10000, // 10 seconds
+      connectionTimeout: 10000,
       greetingTimeout: 10000,
-      socketTimeout: 60000, // 60 seconds
+      socketTimeout: 60000,
       family: 4, // Force IPv4
       auth: {
         user: env.EMAIL_USER,
