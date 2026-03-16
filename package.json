@@ -8,8 +8,8 @@
     "build:css": "npx tailwindcss -i ./frontend/src/tailwind.css -o ./frontend/dist/tailwind.css",
     "build:frontend": "ts-node scripts/build-frontend.ts && npm run build:css",
     "start": "node dist/index.js",
-    "dev": "nodemon --exec ts-node src/index.ts",
-    "kill-port": "taskkill /F /IM node.exe /T",
+    "dev": "ts-node-dev --respawn --transpile-only --ignore-watch frontend,dist src/index.ts",
+    "kill-port": "npx kill-port 3000",
     "typecheck": "tsc --noEmit && tsc --project frontend/tsconfig.json --noEmit",
     "clean": "rimraf dist frontend/dist",
     "test": "echo \"Error: no test specified\" && exit 1"

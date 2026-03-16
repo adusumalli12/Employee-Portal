@@ -26,7 +26,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
 # Expose the API/Frontend port
-EXPOSE 5000
+EXPOSE 3000
 
 # Start the server
 CMD ["node", "dist/index.js"]

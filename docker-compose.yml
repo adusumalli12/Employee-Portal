@@ -10,6 +10,8 @@ services:
     environment:
       - NODE_ENV=production
       - MONGO_URI=mongodb://mongodb:27017/employee-portal
+      - PORT=3000
+      - APP_URL=http://localhost:3000
     depends_on:
       - mongodb
 

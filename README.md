@@ -51,6 +51,52 @@ To compile the entire project (Backend & Frontend):
 npm run build
 ```
 
+## 🐳 Docker Setup
+
+You can run the entire stack (App + MongoDB) using Docker:
+
+1. **Build and Start**:
+   ```bash
+   docker-compose up -d --build
+   ```
+2. **Access**: The app will be available at `http://localhost:3000`.
+
+## ☁️ Deployment to AWS EC2
+
+To deploy this project to an AWS EC2 instance, follow these steps:
+
+### 1. Launch an EC2 Instance
+- Use **Ubuntu 22.04 LTS** (Amazon Machine Image).
+- Choose at least a **t3.small** or **t2.medium** (recommended for builds).
+- In **Security Groups**, allow:
+    - `TCP Port 22` (SSH)
+    - `TCP Port 80` (HTTP)
+    - `TCP Port 3000` (App Port)
+
+### 2. Install Docker & Docker Compose
+Connect to your instance via SSH and run:
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+# Log out and log back in for changes to take effect
+```
+
+### 3. Clone and Deploy
+```bash
+git clone <your-repo-url>
+cd <repo-folder>
+# Create and edit your .env file
+nano .env
+# Start the application
+docker-compose up -d --build
+```
+
+### 4. Access the App
+Navigate to `http://<your-ec2-public-ip>:3000` in your browser.
+
 ## 📚 Documentation
 
 The best way to explore the system is by using the integrated dashboard:
